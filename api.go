@@ -6,13 +6,15 @@ import (
 	"encoding/xml"
 	"io/ioutil"
 	"net/http"
+	"fmt"
 )
 
-func NewPleskApi(url string, username string, password string) *PleskAPI {
+func NewPleskApi(url string, username string, password string, debug bool) *PleskAPI {
 	return &PleskAPI{
 		url: url,
 		username: username,
 		password: password,
+		debugging: debug,
 	}
 }
 
@@ -20,6 +22,7 @@ type PleskAPI struct {
 	url      string
 	username string
 	password string
+	debugging bool
 }
 
 type getMailResponse struct {
@@ -34,9 +37,7 @@ type getMailingListResponse struct {
 }
 
 func (self *PleskAPI) CreateEmail(name string, forward []string) {
-	// POST requets
-	// debug.Nop()
-
+	
 	packet := `<packet version='1.6.3.0'>
 				    <mail>
 				   	    <create>
@@ -64,8 +65,6 @@ func (self *PleskAPI) CreateEmail(name string, forward []string) {
 }
 
 func (self *PleskAPI) CreateMailingList(list string) {
-	// POST requets
-	// debug.Nop()
 
 	packet := `<packet version='1.6.3.0'>
 				    <maillist>
@@ -83,8 +82,6 @@ func (self *PleskAPI) CreateMailingList(list string) {
 }
 
 func (self *PleskAPI) UpdateEmail(name string, forward []string) {
-	// POST requets
-	// debug.Nop()
 
 	packet := `<packet version='1.6.3.0'>
 				    <mail>
@@ -113,8 +110,6 @@ func (self *PleskAPI) UpdateEmail(name string, forward []string) {
 }
 
 func (self *PleskAPI) AddEmailToList(plesk PleskAPI, list string, name string) {
-	// POST requets
-	// debug.Nop()
 
 	packet := `<packet version='1.6.3.0'>
 				    <maillist>
@@ -132,8 +127,7 @@ func (self *PleskAPI) AddEmailToList(plesk PleskAPI, list string, name string) {
 }
 
 func (self *PleskAPI) EmailExists(name string) (resp getMailResponse, err error) {
-	// POST requets
-	// debug.Nop()
+	
 	var result getMailResponse
 
 	packet := `<packet version="1.6.3.0">
@@ -148,7 +142,6 @@ func (self *PleskAPI) EmailExists(name string) (resp getMailResponse, err error)
 				 	</mail>
 				</packet>`
 
-	// reader := strings.Read([]byte(packet))
 
 	response, err := self.doRequest(packet)
 
@@ -158,7 +151,6 @@ func (self *PleskAPI) EmailExists(name string) (resp getMailResponse, err error)
 
 	err = xml.Unmarshal(response, &result)
 	if err != nil {
-		// debug.Print("error: ", err)
 		return result, err
 	}
 
@@ -166,8 +158,7 @@ func (self *PleskAPI) EmailExists(name string) (resp getMailResponse, err error)
 }
 
 func (self *PleskAPI) MailingListExists(listname string) (resp getMailingListResponse, err error) {
-	// POST requets
-	// debug.Nop()
+	
 	var result getMailingListResponse
 
 	packet := `<packet version="1.6.3.0">
@@ -180,8 +171,6 @@ func (self *PleskAPI) MailingListExists(listname string) (resp getMailingListRes
 				 	</maillist>
 				</packet>`
 
-	// reader := strings.Read([]byte(packet))
-
 	response, err := self.doRequest(packet)
 
 	if err != nil {
@@ -190,7 +179,6 @@ func (self *PleskAPI) MailingListExists(listname string) (resp getMailingListRes
 
 	err = xml.Unmarshal(response, &result)
 	if err != nil {
-		// debug.Print("error: ", err)
 		return result, err
 	}
 
@@ -198,14 +186,14 @@ func (self *PleskAPI) MailingListExists(listname string) (resp getMailingListRes
 }
 
 func (self *PleskAPI) doRequest(packet string) (response []byte, err error) {
-	// POST requets
-	// debug.Nop()
+	
+	if self.debugging {
+		return self.doRequestAndDebug(packet)
+	}
+
 	url := self.url
 
 	b := bytes.NewBufferString(packet)
-
-	// debug.Print("body: ", b)
-	// debug.Print("URL: " + url)
 
 	tr := &http.Transport{
 		TLSClientConfig: &tls.Config{
@@ -225,8 +213,47 @@ func (self *PleskAPI) doRequest(packet string) (response []byte, err error) {
 
 	resp, err := client.Do(req)
 
-	// debug.Print("Response: ", resp)
-	// debug.Print("Status: ", err)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	j, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+
+	return j, nil
+}
+
+func (self *PleskAPI) doRequestAndDebug(packet string) (response []byte, err error) {
+	
+	url := self.url
+
+	b := bytes.NewBufferString(packet)
+
+	fmt.Println("body: ", b)
+	
+	tr := &http.Transport{
+		TLSClientConfig: &tls.Config{
+			InsecureSkipVerify: true,
+		},
+	}
+
+	client := &http.Client{
+		Transport: tr,
+	}
+
+	req, err := http.NewRequest("POST", url, b)
+	// ...
+	req.Header.Add("HTTP_AUTH_LOGIN", self.username)
+	req.Header.Add("HTTP_AUTH_PASSWD", self.password)
+	req.Header.Add("Content-Type", "text/xml")
+
+	resp, err := client.Do(req)
+
+	fmt.Println("Response: ", resp)
+	fmt.Println("Status: ", err)
 
 	if err != nil {
 		return nil, err
@@ -238,8 +265,8 @@ func (self *PleskAPI) doRequest(packet string) (response []byte, err error) {
 		return nil, err
 	}
 
-	// result := string(j)
-	// debug.Print("Result:", result)
+	result := string(j)
+	fmt.Println("Result:", result)
 
 	return j, nil
 }
